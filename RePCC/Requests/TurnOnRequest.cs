@@ -2,4 +2,4 @@ using MediatR;
 
 namespace RePCC.Requests;
 
-internal sealed record TurnOnRequest : IRequest;
+internal sealed record TurnOnRequest(Computer Computer) : IRequest;

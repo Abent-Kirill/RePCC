@@ -1,14 +1,21 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 
 namespace RePCC.Worker.Windows;
 
-public class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
+public sealed class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
 {
-    private const int _udpPort = 8888;  // Порт для обнаружения ПК
-    private const int _httpPort = 8889; // Порт для команд выключения
+    /// <summary>
+    /// Порт для обнаружения ПК
+    /// </summary>
+    private const int _udpPort = 8888;
+    /// <summary>
+    /// Порт для команд выключения
+    /// </summary>
+    private const int _httpPort = 8889;
     private HttpListener? _httpListener;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -28,7 +35,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
     private async Task StartUdpDiscoveryAsync(CancellationToken stoppingToken)
     {
         using var udpClient = new UdpClient(_udpPort);
-        logger.LogInformation("UDP-сервер обнаружения запущен на порту {Port}...", _udpPort);
+        logger.LogInformation("UDP-сервер обнаружения запущен...");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -39,7 +46,8 @@ public class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
 
                 if (message == "DISCOVER_PC_SERVICE")
                 {
-                    var responseData = Encoding.UTF8.GetBytes($"PC_AVAILABLE:{Environment.MachineName}");
+                    var macAddress = GetMacAddress();
+                    var responseData = Encoding.UTF8.GetBytes($"PC_AVAILABLE:{Environment.MachineName};{macAddress}");
                     await udpClient.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
                 }
             }
@@ -48,6 +56,18 @@ public class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
                 logger.LogError(ex, "Ошибка в UDP-сервере");
             }
         }
+    }
+
+    private static string GetMacAddress()
+    {
+        var mac = NetworkInterface
+            .GetAllNetworkInterfaces()
+            .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
+                          nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+            .Select(nic => nic.GetPhysicalAddress().ToString())
+            .FirstOrDefault();
+
+        return mac ?? "000000000000";
     }
 
     /// <summary>

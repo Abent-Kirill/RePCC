@@ -5,6 +5,6 @@ namespace RePCC.Handlers;
 
 internal sealed class TurnOnHandler() : IRequestHandler<TurnOnRequest>
 {
-    public async Task Handle(TurnOnRequest request, CancellationToken cancellationToken) => throw new Exception("работает!");
+    public async Task Handle(TurnOnRequest request, CancellationToken cancellationToken) => await request.Computer.TurnOnAsync();
 }
 
