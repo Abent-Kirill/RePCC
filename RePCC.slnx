@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="RePCC.Worker.Windows/RePCC.Worker.Windows.csproj" Id="be23636f-f48f-4ab3-bbe2-26627a61c7a8" />
+  <Project Path="RePCC/RePCC.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+</Solution>
