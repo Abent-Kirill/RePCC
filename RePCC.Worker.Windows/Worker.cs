@@ -5,7 +5,23 @@ using System.Net.Sockets;
 using System.Text;
 
 namespace RePCC.Worker.Windows;
+//Так как служба обычно устанавливается через PowerShell-скрипт или installer от имени администратора, добавь регистрацию URLACL прямо в скрипт развертывания:
 
+//PowerShell
+//# PowerShell (Запускать от Администратора)
+
+//$serviceName = "RePCCWorker"
+//$exePath = "C:\Services\RePCC\RePCC.Worker.Windows.exe"
+//$port = 5000
+
+//# 1. Регистрируем URLACL для порта
+//netsh http add urlacl url="http://+:$port/" user="NT AUTHORITY\Local Service"
+
+//# 2. Создаем службу
+//New-Service -Name $serviceName -BinaryPathName $exePath -StartupType Automatic -Credential "NT AUTHORITY\Local Service"
+
+//# 3. Запускаем службу
+//Start-Service -Name $serviceName
 public sealed class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
 {
     /// <summary>
@@ -20,11 +36,21 @@ public sealed class Worker(ILogger<Worker> logger) : BackgroundService, IDisposa
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Запускаем два параллельных потока: обнаружение и управление
-        var udpTask = StartUdpDiscoveryAsync(stoppingToken);
-        var httpTask = StartHttpServerAsync(stoppingToken);
+        try
+        {
+            logger.LogInformation("Запуск фоновых служб UDP и HTTP...");
 
-        await Task.WhenAll(udpTask, httpTask);
+            var udpTask = StartUdpDiscoveryAsync(stoppingToken);
+            var httpTask = StartHttpServerAsync(stoppingToken);
+
+            await Task.WhenAll(udpTask, httpTask);
+        }
+        catch (Exception ex)
+        {
+            // Если что-то упадет при старте сокетов/HTTP, мы увидим это в логах/EventViewer
+            logger.LogCritical(ex, "Критическая ошибка при работе фоновых задач службы");
+            throw; // Перевыбрасываем, чтобы SCM зафиксировал остановку
+        }
     }
 
     /// <summary>
@@ -47,7 +73,7 @@ public sealed class Worker(ILogger<Worker> logger) : BackgroundService, IDisposa
                 if (message == "DISCOVER_PC_SERVICE")
                 {
                     var macAddress = GetMacAddress();
-                    var responseData = Encoding.UTF8.GetBytes($"PC_AVAILABLE:{Environment.MachineName};{macAddress}");
+                    var responseData = Encoding.UTF8.GetBytes($"PC_AVAILABLE:{Environment.UserName};{macAddress}");
                     await udpClient.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
                 }
             }

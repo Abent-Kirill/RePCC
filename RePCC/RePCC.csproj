@@ -48,6 +48,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 		<PackageReference Include="MediatR" Version="14.2.0" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />

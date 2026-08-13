@@ -5,30 +5,39 @@
              x:Class="RePCC.MainPage"
              x:DataType="local:MainViewModel">
 
-    <CollectionView ItemsSource="{Binding Computers}">
-        <CollectionView.ItemTemplate>
-            <DataTemplate x:DataType="local:Computer">
-                <Grid Padding="10" ColumnDefinitions="*, Auto, Auto">
+    <Grid RowDefinitions="Auto, *">
 
-                    <Label Grid.Column="0" 
-                           Text="{Binding Name}" 
-                           VerticalOptions="Center"/>
+        <Button Grid.Row="0"
+                Text="Обновить"
+                Command="{Binding ScanNetworkCommand}"
+                Margin="10"/>
 
-                    <Button Grid.Column="1" 
-                            Text="Вкл" 
-                            Command="{Binding Source={RelativeSource AncestorType={x:Type local:MainViewModel}}, Path=WakeUpCommand}"
-                            CommandParameter="{Binding}" 
-                            Margin="5,0"/>
+        <CollectionView Grid.Row="1" ItemsSource="{Binding Computers}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="local:Computer">
+                    <Grid Padding="10" ColumnDefinitions="*, Auto, Auto">
 
-                    <Button Grid.Column="2" 
-                            Text="Выкл" 
-                            Command="{Binding Source={RelativeSource AncestorType={x:Type local:MainViewModel}}, Path=ShutdownComputerCommand}"
-                            CommandParameter="{Binding}" 
-                            Margin="5,0"/>
+                        <Label Grid.Column="0"
+                               Text="{Binding Name}"
+                               VerticalOptions="Center"/>
 
-                </Grid>
-            </DataTemplate>
-        </CollectionView.ItemTemplate>
-    </CollectionView>
+                        <Button Grid.Column="1"
+                                Text="Вкл"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type local:MainViewModel}}, Path=WakeUpCommand}"
+                                CommandParameter="{Binding}"
+                                Margin="5,0"/>
+
+                        <Button Grid.Column="2"
+                                Text="Выкл"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type local:MainViewModel}}, Path=ShutdownComputerCommand}"
+                                CommandParameter="{Binding}"
+                                Margin="5,0"/>
+
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
 
 </ContentPage>

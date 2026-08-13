@@ -6,28 +6,44 @@ using RePCC.Requests;
 
 namespace RePCC;
 
-public sealed partial class MainViewModel(IMediator mediator) : ObservableObject
+public sealed partial class MainViewModel : ObservableObject
 {
+    private readonly IMediator _mediator;
+    public MainViewModel(IMediator mediator)
+    {
+        _mediator = mediator;
+    }
     public ObservableCollection<Computer> Computers { get; private set; } = [];
 
     [RelayCommand]
     private async Task WakeUpAsync(Computer? computer)
     {
         if (computer != null)
-            await mediator.Send(new TurnOnRequest(computer));
+            await _mediator.Send(new TurnOnRequest(computer));
     }
 
     [RelayCommand]
     private async Task ScanNetwork()
     {
-        var computers = await mediator.Send(new ScanNetworkRequest());
-        Computers = new ObservableCollection<Computer>(computers); //TODO испавить на добавление
+        var computers = await _mediator.Send(new ScanNetworkRequest());
+        Computers.Clear();
+        foreach (var computer in computers)
+            Computers.Add(computer);
     }
 
     [RelayCommand]
     private async Task ShutdownComputerAsync(Computer? computer)
     {
-        if (computer != null)
-            await mediator.Send(new TurnOffRequest(computer));
+        if (computer is null)
+            return;
+
+        try
+        {
+            await _mediator.Send(new TurnOffRequest(computer));
+        }
+        catch (Exception ex)
+        {
+            await Shell.Current.DisplayAlertAsync("Не удалось выключить ПК", ex.Message, "OK");
+        }
     }
 }

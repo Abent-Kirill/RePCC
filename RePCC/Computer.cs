@@ -41,31 +41,14 @@ public sealed record class Computer(string Name, PhysicalAddress MACAddress, IPA
     /// <exception cref="NotImplementedException"/>
     public async Task TurnOffAsync(CancellationToken cancellationToken)
     {
-        try
+        using var httpClient = new HttpClient()
         {
-            using var httpClient = new HttpClient()
-            {
-                BaseAddress = _baseHttpUrl,
-                Timeout = TimeSpan.FromSeconds(5)
-            };
+            BaseAddress = _baseHttpUrl,
+            Timeout = TimeSpan.FromSeconds(5)
+        };
 
-            var httpResponse = await httpClient.PostAsync(new Uri("shutdown", UriKind.Relative), null, cancellationToken);
-            var result = httpResponse.EnsureSuccessStatusCode();
-            if (result.IsSuccessStatusCode)
-            {
-                // Можно обновить статус в UI, что сигнал отправлен
-                System.Diagnostics.Debug.WriteLine($"Сигнал на выключение ПК {Name} успешно доставлен!");
-                IsOnline = false;
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine($"Ошибка сети: {result.Content}");
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Не удалось выключить ПК: {ex.Message}");
-        }
-
+        var httpResponse = await httpClient.PostAsync(new Uri("shutdown", UriKind.Relative), null, cancellationToken);
+        httpResponse.EnsureSuccessStatusCode();
+        IsOnline = false;
     }
 }
