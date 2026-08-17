@@ -1,4 +1,5 @@
 using MediatR;
+using RePCC.Models;
 
 namespace RePCC.Requests;
 

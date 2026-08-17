@@ -2,19 +2,18 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
-using MediatR;
-using RePCC.Requests;
+using RePCC.Models;
 
-namespace RePCC.Handlers;
+namespace RePCC;
 
-internal sealed record ScanNetworkHandler : IRequestHandler<ScanNetworkRequest, IEnumerable<Computer>>
+public static class NetworkService
 {
     /// <summary>
     /// Порт для обнаружения ПК
     /// </summary>
     private const int _udpPort = 8888;
 
-    public async Task<IEnumerable<Computer>> Handle(ScanNetworkRequest request, CancellationToken cancellationToken)
+    public static async Task<IEnumerable<Computer>> ScanLocalNetwork()
     {
         var computers = new List<Computer>();
         using var udpClient = new UdpClient();
@@ -41,11 +40,11 @@ internal sealed record ScanNetworkHandler : IRequestHandler<ScanNetworkRequest, 
                     if (parts.Length >= 2)
                     {
                         var pcName = parts[0];
-                        var macAddress = parts[1]; // Получили наш MAC!
+                        var macAddress = parts[1];
                         var pcIp = result.RemoteEndPoint.Address;
                         if (PhysicalAddress.TryParse(macAddress, out var MACAddress))
                         {
-                            if (!computers.Any(c => c.IPAddress.Equals(pcIp)))
+                            if (!computers.Any(c => c.IPAddress!.Equals(pcIp)))
                             {
                                 var computer = new Computer(pcName, MACAddress, pcIp);
                                 computers.Add(computer);

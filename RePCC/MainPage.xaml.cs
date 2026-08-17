@@ -1,3 +1,5 @@
+using RePCC.ViewModels;
+
 namespace RePCC;
 
 public sealed partial class MainPage : ContentPage
@@ -13,7 +15,7 @@ public sealed partial class MainPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        _viewModel.ScanNetworkCommand.Execute(null);
+        _viewModel.GetComputersCommand.Execute(null);
     }
 }
 

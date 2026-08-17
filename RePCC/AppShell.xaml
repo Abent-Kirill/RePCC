@@ -7,8 +7,7 @@
     Title="RePCC">
 
     <ShellContent
-        Title="Home"
+        Title="Remout PC Control"
         ContentTemplate="{DataTemplate local:MainPage}"
         Route="MainPage" />
-
 </Shell>

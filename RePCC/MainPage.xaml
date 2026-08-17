@@ -2,42 +2,72 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:RePCC"
+             xmlns:viewModels="clr-namespace:RePCC.ViewModels"
              x:Class="RePCC.MainPage"
-             x:DataType="local:MainViewModel">
+             x:DataType="viewModels:MainViewModel">
 
-    <Grid RowDefinitions="Auto, *">
+    <Grid RowDefinitions="Auto, *"
+          ColumnDefinitions="*, Auto">
 
+        <!-- Кнопка обновления списка (в верхней строке) -->
         <Button Grid.Row="0"
-                Text="Обновить"
-                Command="{Binding ScanNetworkCommand}"
+                Grid.Column="1"
+                Text="🔃"
+                WidthRequest="50"
+                Background="Transparent"
+                FontSize="20"
+                Command="{Binding GetComputersCommand}"
                 Margin="10"/>
 
-        <CollectionView Grid.Row="1" ItemsSource="{Binding Computers}">
+        <!-- Список компьютеров -->
+        <CollectionView Grid.Row="1" 
+                        Grid.Column="0" 
+                        Grid.ColumnSpan="2" 
+                        ItemsSource="{Binding Computers}">
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="local:Computer">
-                    <Grid Padding="10" ColumnDefinitions="*, Auto, Auto">
+                <DataTemplate x:DataType="viewModels:ComputerItemViewModel">
+                    <Grid ColumnDefinitions="*, Auto, Auto" Padding="5">
 
+                        <!-- Имя компьютера -->
                         <Label Grid.Column="0"
                                Text="{Binding Name}"
-                               VerticalOptions="Center"/>
+                               VerticalOptions="Center"
+                               FontSize="16"
+                               Margin="5,0"/>
 
+                        <!-- Кнопка включения / выключения -->
                         <Button Grid.Column="1"
-                                Text="Вкл"
-                                Command="{Binding Source={RelativeSource AncestorType={x:Type local:MainViewModel}}, Path=WakeUpCommand}"
-                                CommandParameter="{Binding}"
-                                Margin="5,0"/>
+                                Command="{Binding TogglePowerCommand}"
+                                Margin="5,0">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsOnline}" Value="True">
+                                    <Setter Property="Text" Value="Off"/>
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding IsOnline}" Value="False">
+                                    <Setter Property="Text" Value="On"/>
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
 
+                        <!-- Кнопка сохранения в БД -->
                         <Button Grid.Column="2"
-                                Text="Выкл"
-                                Command="{Binding Source={RelativeSource AncestorType={x:Type local:MainViewModel}}, Path=ShutdownComputerCommand}"
-                                CommandParameter="{Binding}"
-                                Margin="5,0"/>
+                                Text="⭐"
+                                Command="{Binding SaveCommand}"
+                                Background="Transparent"
+                                FontSize="19"
+                                Margin="5,0">
+                            <Button.Triggers>
+                                <!-- Выключаем кнопку, если ПК уже сохранен -->
+                                <DataTrigger TargetType="Button" Binding="{Binding IsSavedInDb}" Value="True">
+                                    <Setter Property="IsEnabled" Value="False" />
+                                    <Setter Property="Opacity" Value="0.3" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
 
                     </Grid>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
-
     </Grid>
-
 </ContentPage>
