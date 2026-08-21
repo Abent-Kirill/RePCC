@@ -16,18 +16,20 @@ public sealed partial class MainViewModel(IMediator mediator) : ObservableObject
         try
         {
             var computers = await mediator.Send(new GetComputersRequest());
-            Computers.Clear();
 
-            foreach (var computer in computers)
+            // Гарантируем, что изменение коллекции происходит в UI-потоке
+            MainThread.BeginInvokeOnMainThread(() =>
             {
-                // Оборачиваем доменную модель в UI-обертку
-                var itemViewModel = new ComputerItemViewModel(computer, mediator);
-                Computers.Add(itemViewModel);
-            }
+                Computers.Clear();
+                foreach (var computer in computers)
+                {
+                    Computers.Add(new ComputerItemViewModel(computer, mediator));
+                }
+            });
         }
         catch (Exception ex)
         {
-            await Shell.Current.DisplayAlertAsync("Не удалось получить данные о компьютерах", ex.Message, "OK");
+            await Shell.Current.DisplayAlertAsync("Ошибка", ex.Message, "OK");
         }
     }
 }

@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Net.NetworkInformation;
 using MediatR;
 using RePCC.Models;
@@ -10,44 +9,67 @@ internal sealed record GetComputersHandler(ComputersRepository ComputersReposito
 {
     public async Task<IReadOnlyCollection<Computer>> Handle(GetComputersRequest request, CancellationToken cancellationToken)
     {
-        var computersInLocalNetwork = await NetworkService.ScanLocalNetwork();
-        var computersFromDatabase = await ComputersRepository.GetComputerRecordsAsync();
+        var computersInLocalNetworkTask = NetworkService.ScanLocalNetworkAsync(cancellationToken);
+        var computersFromDatabaseTask = ComputersRepository.GetComputerRecordsAsync(cancellationToken);
 
-        var dbLookup = computersFromDatabase
-            .ToLookup(db => db.MacAddress, StringComparer.OrdinalIgnoreCase);
-        var netLookup = computersInLocalNetwork
-            .ToLookup(net => net.MACAddress.ToString(), StringComparer.OrdinalIgnoreCase);
+        await Task.WhenAll(computersFromDatabaseTask, computersInLocalNetworkTask);
 
-        var allMacs = computersFromDatabase.Select(db => db.MacAddress)
-            .Union(computersInLocalNetwork.Select(net => net.MACAddress.ToString()))
-            .Distinct();
+        var computersInLocalNetwork = await computersInLocalNetworkTask;
+        var computersFromDatabase = await computersFromDatabaseTask;
 
-        var allComputers = allMacs.Select(mac =>
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var mergedComputers = new Dictionary<string, (ComputerRecord? Db, Computer? Net)>(
+            computersFromDatabase.Count,
+            StringComparer.OrdinalIgnoreCase
+        );
+
+        foreach (var db in computersFromDatabase)
         {
-            var dbRecord = dbLookup[mac].SingleOrDefault();
-            var netDevice = netLookup[mac].SingleOrDefault();
-
-            if (netDevice is null && dbRecord is null)
+            if (db.MacAddress != null)
             {
-                return null;
+                mergedComputers[db.MacAddress] = (db, null);
             }
+        }
+
+        foreach (var net in computersInLocalNetwork)
+        {
+            var macStr = net.MACAddress.ToString();
+
+            if (mergedComputers.TryGetValue(macStr, out var existing))
+            {
+                mergedComputers[macStr] = (existing.Db, net);
+                continue;
+            }
+            mergedComputers[macStr] = (null, net);
+        }
+
+        var allComputers = mergedComputers.Select(pair =>
+        {
+            var (dbRecord, netDevice) = pair.Value;
+
             if (dbRecord is null)
             {
-                return new Computer(netDevice.Name, netDevice.MACAddress, netDevice.IPAddress);
+                var computer = new Computer(netDevice!.Name, netDevice.MACAddress, netDevice.IPAddress)
+                {
+                    IsOnline = true
+                };
+                return computer;
             }
+
             if (netDevice is null)
             {
                 if (PhysicalAddress.TryParse(dbRecord.MacAddress, out var macAdr))
                 {
-                    return new Computer(dbRecord.Name, macAdr, null);
+                    var computer = new Computer(dbRecord.Name, macAdr, null) { IsOnline = false };
+                    return computer;
                 }
-                throw new FormatException("Не смог распарсить MAC у dbRecord");
+                throw new FormatException($"Не смог распарсить MAC у dbRecord: {dbRecord.MacAddress}");
             }
-            else
-            {
-                return new Computer(dbRecord.Name, netDevice.MACAddress, netDevice.IPAddress);
-            }
-        }).ToImmutableList() ?? throw new Exception("Ни один из компьютеров не был найден");
+
+            return new Computer(dbRecord.Name, netDevice.MACAddress, netDevice.IPAddress) { IsOnline = true };
+        }).ToList();
+
         return allComputers;
     }
 }

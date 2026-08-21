@@ -7,6 +7,8 @@
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="RePCC/RePCC.csproj">
-    <Deploy Solution="*|Any CPU" />
+    <Build Solution="*|x64" Project="false" />
+    <Build Solution="Debug|Any CPU" Project="false" />
+    <Deploy Solution="Release|Any CPU" />
   </Project>
 </Solution>

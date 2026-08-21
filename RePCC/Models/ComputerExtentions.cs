@@ -10,7 +10,7 @@ public static class ComputerExtentions
     /// </summary>
     /// <param name="computer"></param>
     /// <returns>ComputerRecord</returns>
-    public static ComputerRecord ToRecord(this Computer computer) => new(computer.Name, computer.MACAddress.ToString());
+    public static ComputerRecord ToRecord(this Computer computer) => new(computer.Name, computer.MACAddress.ToString(), computer.IsOnline);
 
     /// <summary>
     /// Преобразование ComputerRecord в Computer

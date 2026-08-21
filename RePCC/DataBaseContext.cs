@@ -1,40 +1,32 @@
+using LinqToDB;
+using LinqToDB.Data;
+using LinqToDB.DataProvider.SQLite;
 using RePCC.Models;
-using SQLite;
 
 namespace RePCC;
 
-public sealed class DataBaseContext
+public sealed partial class DataBaseContext : DataConnection
 {
-    private readonly SQLiteAsyncConnection _database;
-    private readonly SemaphoreSlim _semaphore;
-    private bool _isInit;
+    private static readonly string _databasePath = Path.Combine(FileSystem.AppDataDirectory, "computers.db3");
+    private static readonly string _connectionString = $"Data Source={_databasePath}";
+    private static bool _isTableCreated;
+    private static readonly Lock _syncRoot = new();
 
-    public DataBaseContext()
-    {
-        var databasePath = Path.Combine(FileSystem.AppDataDirectory, "computers.db3");
-        _database = new SQLiteAsyncConnection(databasePath);
-        _semaphore = new SemaphoreSlim(1, 1);
-    }
+    public ITable<ComputerRecord> Computers => this.GetTable<ComputerRecord>();
 
-    public async Task<SQLiteAsyncConnection> GetDatabaseAsync()
+    public DataBaseContext() : base(new DataOptions().UseSQLite(connectionString: _connectionString, provider: SQLiteProvider.Microsoft)) => EnsureTablesCreated();
+
+    private void EnsureTablesCreated()
     {
-        if (!_isInit)
+        if (_isTableCreated) return;
+
+        lock (_syncRoot)
         {
-            await _semaphore.WaitAsync();
-            try
-            {
-                if (!_isInit)
-                {
-                    await _database.CreateTableAsync<ComputerRecord>();
-                    _isInit = true;
-                }
-            }
-            finally
-            {
-                _semaphore.Release();
-            }
-        }
+            if (_isTableCreated) return;
 
-        return _database;
+            // tableOptions: TableOptions.CheckExistence предотвращает ошибки, если таблица уже создана.
+            this.CreateTable<ComputerRecord>(tableOptions: TableOptions.CheckExistence);
+            _isTableCreated = true;
+        }
     }
 }

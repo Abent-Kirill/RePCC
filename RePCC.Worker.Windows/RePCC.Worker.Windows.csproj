@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-RePCC.Worker.Windows-0e14ef39-3c6d-4c87-a77f-586f6b5c27ae</UserSecretsId>
     <Platforms>AnyCPU;x64</Platforms>
+    <PublishAot>False</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>

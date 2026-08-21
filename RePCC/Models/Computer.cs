@@ -8,12 +8,12 @@ public sealed record class Computer(string Name, PhysicalAddress MACAddress, IPA
 {
     private const int _httpPort = 8889;
 
-    public bool IsOnline { get; private set; } = true;
+    public bool IsOnline { get; set; } = true;
 
     /// <summary>
     /// Команда на включение (WOL)
     /// </summary>
-    public async Task TurnOnAsync()
+    public async Task TurnOnAsync(CancellationToken cancellationToken = default)
     {
 #if ANDROID
         var context = Android.App.Application.Context;
@@ -38,6 +38,7 @@ public sealed record class Computer(string Name, PhysicalAddress MACAddress, IPA
 
             var targetEndpoint = new IPEndPoint(IPAddress.Broadcast, 9);
 
+            cancellationToken.ThrowIfCancellationRequested();
             await client.SendAsync(packet, packet.Length, targetEndpoint);
 
             IsOnline = true;
@@ -56,19 +57,18 @@ public sealed record class Computer(string Name, PhysicalAddress MACAddress, IPA
     /// <summary>
     /// Команда на выключение
     /// </summary>
-    public async Task TurnOffAsync(CancellationToken cancellationToken)
+    public async Task TurnOffAsync(CancellationToken cancellationToken = default)
     {
         if (IPAddress is null || IPAddress.Equals(IPAddress.Any) || IPAddress.Equals(IPAddress.Loopback))
         {
             throw new InvalidOperationException($"Невалидный IP-адрес для выключения: {IPAddress}");
         }
 
-        // Формируем полный прямой URI без зависимости от BaseAddress
         var requestUri = new Uri($"http://{IPAddress}:{_httpPort}/shutdown", UriKind.Absolute);
 
         using var httpClient = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(30)
+            Timeout = TimeSpan.FromSeconds(15)
         };
 
         var response = await httpClient.PostAsync(requestUri, null, cancellationToken);
@@ -76,11 +76,9 @@ public sealed record class Computer(string Name, PhysicalAddress MACAddress, IPA
         if (response.IsSuccessStatusCode)
         {
             IsOnline = false;
+            return;
         }
-        else
-        {
-            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"Ошибка выключения ПК ({response.StatusCode}): {errorContent}");
-        }
+        var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        throw new HttpRequestException($"Ошибка выключения ПК ({response.StatusCode}): {errorContent}");
     }
 }

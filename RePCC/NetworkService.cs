@@ -13,21 +13,26 @@ public static class NetworkService
     /// </summary>
     private const int _udpPort = 8888;
 
-    public static async Task<IEnumerable<Computer>> ScanLocalNetwork()
+    public static async Task<IReadOnlyCollection<Computer>> ScanLocalNetworkAsync(CancellationToken cancellationToken = default)
     {
         var computers = new List<Computer>();
         using var udpClient = new UdpClient();
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(3));
+        var token = cts.Token;
 
         var requestData = Encoding.UTF8.GetBytes("DISCOVER_PC_SERVICE");
         var targetEndPoint = new IPEndPoint(IPAddress.Broadcast, _udpPort);
+
+        token.ThrowIfCancellationRequested();
         await udpClient.SendAsync(requestData, requestData.Length, targetEndPoint);
 
-        while (!cts.IsCancellationRequested)
+        while (!token.IsCancellationRequested)
         {
             try
             {
-                var result = await udpClient.ReceiveAsync(cts.Token);
+                var result = await udpClient.ReceiveAsync(token);
                 var responseMessage = Encoding.UTF8.GetString(result.Buffer);
 
                 if (responseMessage.StartsWith("PC_AVAILABLE:"))

@@ -1,38 +1,52 @@
+using LinqToDB;
+using LinqToDB.Async;
+using LinqToDB.Data;
 using RePCC.Models;
 
 namespace RePCC;
 
-public sealed class ComputersRepository(DataBaseContext dataBaseContext)
+public sealed class ComputersRepository
 {
-    public async Task<IReadOnlyCollection<ComputerRecord>> GetComputerRecordsAsync()
+    // Вспомогательный метод для создания свежего контекста на каждый запрос
+    private static DataBaseContext CreateContext() => new();
+
+    public async Task<IReadOnlyCollection<ComputerRecord>> GetComputerRecordsAsync(CancellationToken cancellationToken = default)
     {
-        var db = await dataBaseContext.GetDatabaseAsync();
-        return await db.Table<ComputerRecord>().ToArrayAsync();
+        // ИСПРАВЛЕНО: Оборачиваем в using, чтобы подключение закрывалось вовремя
+        using var db = CreateContext();
+        var result = await db.Computers.ToArrayAsync(cancellationToken);
+        return result;
     }
 
-    public async Task<int> AddAsync(ComputerRecord computerRecord)
+    public async Task<int> AddAsync(ComputerRecord computerRecord, CancellationToken cancellationToken = default)
     {
-        var db = await dataBaseContext.GetDatabaseAsync();
-        return await db.InsertOrReplaceAsync(computerRecord);
+        using var db = CreateContext();
+
+        // ИСПРАВЛЕНО: В LinqToDB метод называется InsertOrUpdateAsync.
+        // Он смотрит на атрибут [PrimaryKey] у MacAddress и делает UPSERT.
+        var result = await db.InsertOrReplaceAsync(computerRecord, token: cancellationToken);
+        return result;
     }
 
-    public async Task<int> AddAsync(IEnumerable<ComputerRecord> computerRecords)
+    public async Task<int> AddAsync(IEnumerable<ComputerRecord> computerRecords, CancellationToken cancellationToken = default)
     {
-        var db = await dataBaseContext.GetDatabaseAsync();
-        var count = 0;
-        await db.RunInTransactionAsync(tran =>
+        using var db = CreateContext();
+
+        var options = new BulkCopyOptions
         {
-            foreach (var record in computerRecords)
-            {
-                count += tran.InsertOrReplace(record);
-            }
-        });
-        return count;
-    }
-    public async Task<int> DeleteAsync(ComputerRecord computerRecord)
-    {
-        var db = await dataBaseContext.GetDatabaseAsync();
-        return await db.DeleteAsync(computerRecord);
+            BulkCopyType = BulkCopyType.MultipleRows
+        };
+
+        // Работает идеально: BulkCopyAsync атомарно и быстро запишет коллекцию.
+        var result = await db.BulkCopyAsync(options, computerRecords, cancellationToken: cancellationToken);
+        return (int)result.RowsCopied;
     }
 
+    public async Task<int> DeleteAsync(ComputerRecord computerRecord, CancellationToken cancellationToken = default)
+    {
+        using var db = CreateContext();
+
+        var result = await db.DeleteAsync(computerRecord, token: cancellationToken);
+        return result;
+    }
 }

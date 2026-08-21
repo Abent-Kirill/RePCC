@@ -22,125 +22,143 @@ namespace RePCC.Worker.Windows;
 
 //# 3. Запускаем службу
 //Start-Service -Name $serviceName
-public sealed class Worker(ILogger<Worker> logger) : BackgroundService, IDisposable
+public sealed class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    /// <summary>
-    /// Порт для обнаружения ПК
-    /// </summary>
     private const int _udpPort = 8888;
-    /// <summary>
-    /// Порт для команд выключения
-    /// </summary>
     private const int _httpPort = 8889;
     private HttpListener? _httpListener;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            logger.LogInformation("Запуск фоновых служб UDP и HTTP...");
+        logger.LogInformation("Запуск фоновых служб UDP и HTTP...");
 
-            var udpTask = StartUdpDiscoveryAsync(stoppingToken);
-            var httpTask = StartHttpServerAsync(stoppingToken);
+        var udpTask = StartUdpDiscoveryAsync(cancellationToken);
+        var httpTask = StartHttpServerAsync(cancellationToken);
 
-            await Task.WhenAll(udpTask, httpTask);
-        }
-        catch (Exception ex)
-        {
-            // Если что-то упадет при старте сокетов/HTTP, мы увидим это в логах/EventViewer
-            logger.LogCritical(ex, "Критическая ошибка при работе фоновых задач службы");
-            throw; // Перевыбрасываем, чтобы SCM зафиксировал остановку
-        }
+        await Task.WhenAll(udpTask, httpTask);
     }
 
     /// <summary>
     /// Вещание доступности (UDP-ответчик)
     /// </summary>
-    /// <param name="stoppingToken"></param>
-    /// <returns></returns>
-    private async Task StartUdpDiscoveryAsync(CancellationToken stoppingToken)
+    private async Task StartUdpDiscoveryAsync(CancellationToken cancellationToken)
     {
         using var udpClient = new UdpClient(_udpPort);
-        logger.LogInformation("UDP-сервер обнаружения запущен...");
+        logger.LogInformation("UDP-сервер обнаружения запущен на порту {Port}...", _udpPort);
 
-        while (!stoppingToken.IsCancellationRequested)
+        while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                var result = await udpClient.ReceiveAsync(stoppingToken);
+                var result = await udpClient.ReceiveAsync(cancellationToken);
                 var message = Encoding.UTF8.GetString(result.Buffer);
 
                 if (message == "DISCOVER_PC_SERVICE")
                 {
                     var macAddress = GetMacAddress();
+                    if (string.IsNullOrEmpty(macAddress))
+                    {
+                        logger.LogWarning("Не удалось определить MAC-адрес ПК. Ответ на UDP-запрос пропущен.");
+                        continue;
+                    }
+
                     var responseData = Encoding.UTF8.GetBytes($"PC_AVAILABLE:{Environment.UserName};{macAddress}");
-                    await udpClient.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
+                    await udpClient.SendAsync(responseData, result.RemoteEndPoint, cancellationToken);
+
+                    logger.LogInformation("Отправлен UDP-ответ устройству {EndPoint}", result.RemoteEndPoint);
                 }
             }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                logger.LogError(ex, "Ошибка в UDP-сервере");
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Ошибка при обработке UDP-запроса");
             }
         }
     }
 
-    private static string GetMacAddress()
+    private static string? GetMacAddress()
     {
-        var mac = NetworkInterface
+        return NetworkInterface
             .GetAllNetworkInterfaces()
             .Where(nic => nic.OperationalStatus == OperationalStatus.Up &&
                           nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
             .Select(nic => nic.GetPhysicalAddress().ToString())
-            .FirstOrDefault();
-
-        return mac ?? "000000000000";
+            .FirstOrDefault(mac => !string.IsNullOrEmpty(mac));
     }
 
     /// <summary>
     /// Прием команды на выключение (HTTP-сервер)
     /// </summary>
-    /// <param name="stoppingToken"></param>
-    /// <returns></returns>
-    private async Task StartHttpServerAsync(CancellationToken stoppingToken)
+    private async Task StartHttpServerAsync(CancellationToken cancellationToken)
     {
         _httpListener = new HttpListener();
         _httpListener.Prefixes.Add($"http://*:{_httpPort}/");
-        _httpListener.Start();
-        logger.LogInformation("HTTP-сервер управления запущен на порту {Port}...", _httpPort);
 
-        // Закрываем listener при отмене токена
-        using var registration = stoppingToken.Register(() => _httpListener.Stop());
+        try
+        {
+            _httpListener.Start();
+            logger.LogInformation("HTTP-сервер управления запущен на порту {Port}...", _httpPort);
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "Не удалось запустить HTTP-listener. Возможно, порт занят или нужны права Администратора.");
+            return;
+        }
 
-        while (!stoppingToken.IsCancellationRequested)
+        using var registration = cancellationToken.Register(() =>
+        {
+            try { _httpListener.Stop(); } catch { }
+        });
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
             try
             {
                 var context = await _httpListener.GetContextAsync();
-                _ = Task.Run(() => HandleHttpRequestAsync(context), stoppingToken);
+                _ = HandleHttpRequestAsync(context, cancellationToken);
             }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            catch (HttpListenerException) when (cancellationToken.IsCancellationRequested)
             {
-                logger.LogError(ex, "Ошибка в HTTP-сервере");
+                // Ошибка вызовется искусственно методом _httpListener.Stop() при закрытии службы. Это норма.
+                break;
             }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Ошибка в цикле приема HTTP-запросов");
+            }
+        }
     }
 
-    private async Task HandleHttpRequestAsync(HttpListenerContext context)
+    private async Task HandleHttpRequestAsync(HttpListenerContext context, CancellationToken cancellationToken)
     {
         var request = context.Request;
         using var response = context.Response;
 
-        if (request.Url?.AbsolutePath == "/shutdown" && request.HttpMethod == "POST")
-        {
-            logger.LogWarning("Получена команда на выключение ПК!");
-
-            var buffer = Encoding.UTF8.GetBytes("Shutting down...");
-            response.ContentLength64 = buffer.Length;
-            await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
-            response.OutputStream.Close();
-            ShutdownComputer();
-        }
-        else
+        if (request.Url?.AbsolutePath != "/shutdown" || request.HttpMethod != "POST")
         {
             response.StatusCode = (int)HttpStatusCode.NotFound;
+            return;
+        }
+
+        logger.LogWarning("Получена валидная команда на выключение ПК от {RemoteEndPoint}!", request.RemoteEndPoint);
+
+        try
+        {
+            var buffer = Encoding.UTF8.GetBytes("Shutting down...");
+            response.ContentLength64 = buffer.Length;
+            response.StatusCode = (int)HttpStatusCode.OK;
+
+            await response.OutputStream.WriteAsync(buffer, cancellationToken);
+            response.OutputStream.Close();
+
+            ShutdownComputer();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Ошибка отправки HTTP-ответа клиенту");
         }
     }
 
@@ -156,7 +174,7 @@ public sealed class Worker(ILogger<Worker> logger) : BackgroundService, IDisposa
 
     public override void Dispose()
     {
-        _httpListener?.Close();
+        try { _httpListener?.Close(); } catch { }
         base.Dispose();
     }
 }
